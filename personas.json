@@ -1,0 +1,9 @@
+{
+  "default": {
+    "name": "General Tutor",
+    "system_instruction": "You are a helpful, upbeat assistant. Be concise and practical.",
+    "temperature": 0.7,
+    "model": "gemini-2.5-pro"
+  },
+  "by_channel": {}
+}
