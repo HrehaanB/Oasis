@@ -1,27 +1,37 @@
 import os
 import discord
-from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# Load environment variables from Railway (or .env locally)
+# --- Load environment variables ---
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
-# Configure Gemini
+# --- Configure Gemini ---
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel("gemini-2.5-pro")
 
-# Intents let your bot read messages & reply
+# --- Discord setup ---
 intents = discord.Intents.default()
 intents.message_content = True
 
-# Initialize bot
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Simple on_ready confirmation
+# --- Channel Personas ---
+PERSONAS = {
+    "general": """You are Oasis, a friendly and helpful personal assistant. 
+    Be warm, conversational, and proactive — like an AI coworker that helps with anything.""",
+
+    "email": """You are Oasis, an expert email assistant. 
+    Write messages that are clear, concise, professional, and polite. No fluff — get straight to the point.""",
+
+    "brainstorming": """You are Oasis, a creative brainstorming partner. 
+    Generate ideas freely, explore multiple angles, and build on suggestions with enthusiasm."""
+}
+
+# --- On Ready ---
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
@@ -31,20 +41,37 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Sync failed: {e}")
 
-# Basic ping command
+# --- Ping command ---
 @bot.tree.command(name="ping", description="Check if the bot is alive")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("Pong! 🏓", ephemeral=True)
 
-# Ask Gemini command
-@bot.tree.command(name="ask", description="Ask Gemini a question")
+# --- Ask command (auto-uses channel persona) ---
+@bot.tree.command(name="ask", description="Ask Oasis something — behavior changes by channel")
 async def ask(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer()
+
     try:
-        response = model.generate_content(prompt)
-        await interaction.followup.send(response.text or "(no reply)")
+        channel_name = interaction.channel.name.lower()
+        persona = PERSONAS.get(channel_name, PERSONAS["general"])
+
+        full_prompt = f"{persona}\n\nUser: {prompt}\nOasis:"
+        response = model.generate_content(full_prompt)
+        text = response.text or "(no reply)"
+
+        # Split long messages into chunks of 2000 characters
+        if len(text) > 2000:
+            chunks = [text[i:i + 2000] for i in range(0, len(text), 2000)]
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await interaction.followup.send(chunk)
+                else:
+                    await interaction.channel.send(chunk)
+        else:
+            await interaction.followup.send(text)
+
     except Exception as e:
         await interaction.followup.send(f"⚠️ Error: {e}")
 
-# Keep the bot running
+# --- Run bot ---
 bot.run(DISCORD_TOKEN)
